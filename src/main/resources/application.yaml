@@ -1,0 +1,10 @@
+debug: false
+logging:
+  level:
+    com.sungmin.singletrain_borad: debug
+    org.springframework.web.servlet: debug
+spring:
+  datasource:
+    url: "jdbc:mysql://localhost:3306"
+    username: "sungmin"
+    password: "artl0108!"
