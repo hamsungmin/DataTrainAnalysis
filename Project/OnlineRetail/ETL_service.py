@@ -1,6 +1,8 @@
 import pandas as pd
 from sqlalchemy import create_engine
+from google.cloud import bigquery
 
+# 1. PostgreSQL 연결 설정
 #python 파일에서 PostgreSQL 연결 설정
 PG_USER = "gamlog"
 PG_PASSWORD = "gamlog1100!"
@@ -18,6 +20,7 @@ except Exception as e:
     print(f"연결 엔진 생성 오류: {e}")
     exit()
 
+# ------------------------------------------------------------------------------
 #2. 데이터 추출(SQL 실행)
 SQL_QUERY = """
 SELECT
@@ -44,6 +47,7 @@ except Exception as e:
     print(f"PostgreSQL 데이터 추출 오류: {e}")
     exit()
 
+# ------------------------------------------------------------------------------
 # 3. 데이터 변환(데이터 정제 및 가공)
 # 중복 제거
 # DataFrame 전체 행이 동일한 경우에만 제거
@@ -85,3 +89,68 @@ print(analysis_df.head())
 # 변환된 데이터의 자료형 확인 (BigQuery 적재 시 중요)
 print("[컬럼별 자료형 (Dtype)]")
 print(analysis_df.info())
+
+# DimProduct (상품 정보)
+dim_product_df = analysis_df[['StockCode', 'Description', 'UnitPrice']].drop_duplicates(subset=['StockCode']).reset_index(drop=True)
+
+# DimCustomer (고객 정보)
+dim_customer_df = analysis_df[['CustomerID', 'Country']].drop_duplicates(subset=['CustomerID']).reset_index(drop=True)
+# *참고: DimCountry를 별도로 분리하려면 이 단계에서 country_id를 생성해야 합니다.
+
+# FactSales 테이블 생성 준비
+fact_sales_df = analysis_df[[
+    'InvoiceNo',
+    'StockCode',
+    'CustomerID',
+    'Date',
+    'Quantity',
+    'TotalPrice'
+]]
+
+# *참고: DimCountry를 별도로 만들었다면, country 대신 country_id를 Fact 테이블에 추가해야 합니다.
+# ------------------------------------------------------------------------------
+# 4. BigQuery 적재
+# --- 1. BigQuery 연결 및 대상 정의 ---
+# 실제 GCP 정보로 대체해야 합니다.
+BQ_PROJECT = "onlineretail-478205"
+BQ_DATASET = "onlineretail_dataset"  # 예: sales_data
+
+client = bigquery.Client(project=BQ_PROJECT)
+try:
+    # WRITE_APPEND: 테이블이 있으면 데이터 추가
+    # WRITE_TRUNCATE: 테이블을 덮어쓰고 기존 데이터 삭제
+    # WRITE_EMPTY: 테이블이 비어있을 때만 적재 허용
+
+    # --- 1. DimProduct 테이블 적재 ---
+    table_id_product = f"{BQ_PROJECT}.{BQ_DATASET}.DimProduct"
+    client.load_table_from_dataframe(
+        dim_product_df,
+        table_id_product,
+        job_config=bigquery.LoadJobConfig(write_disposition="WRITE_TRUNCATE") # 매번 덮어쓰기
+    ).result()
+    print(f"대상 BigQuery 테이블: {table_id_product}")
+
+    # --- 2. DimCustomer 테이블 적재 ---
+    table_id_customer = f"{BQ_PROJECT}.{BQ_DATASET}.DimCustomer"
+    client.load_table_from_dataframe(
+        dim_customer_df,
+        table_id_customer,
+        job_config=bigquery.LoadJobConfig(write_disposition="WRITE_TRUNCATE")
+    ).result()
+    print(f"대상 BigQuery 테이블: {table_id_customer}")
+
+    # ... (DimDate, DimCountry도 동일하게 반복) ...
+
+    # --- 3. FactSales 테이블 적재 ---
+    table_id_sales = f"{BQ_PROJECT}.{BQ_DATASET}.FactSales"
+    client.load_table_from_dataframe(
+        fact_sales_df, 
+        table_id_sales, 
+        job_config=bigquery.LoadJobConfig(write_disposition="WRITE_APPEND") # 또는 TRUNCATE
+    ).result()
+
+    print(f"대상 BigQuery 테이블: {table_id_sales}")
+    print(" 데이터 BigQuery 적재 성공!")
+
+except Exception as e:
+    print(f" BigQuery 데이터 적재 오류 발생: {e}")
