@@ -5,9 +5,9 @@
   - 데이터 정제 / 변환 (Transform)
   - DW 적재 (Load)
 - 데이터 웨어하우스
-  - Fact: 주문
-  - Dim_Customer: 고객, 국가
-  - Dim_Product: 상품 정보
+  - FactSales: 주문
+  - DimCustomer: 고객, 국가
+  - DimProduct: 상품 정보
 - 고객별 구매 패턴, 인기 상품, 월별 매출 추이
 
 터미널 실행 명령어 
